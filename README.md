@@ -1,5 +1,7 @@
 # xprobe
 
+[![CI](https://github.com/gopherex/xprobe/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/gopherex/xprobe/actions/workflows/ci.yml)
+
 Composable, transport-agnostic health probes for Go services.
 Pull-mode HTTP (Kubernetes liveness/readiness/startup), cached HTTP, and `grpc.health.v1` — all backed by the same probe primitives.
 
