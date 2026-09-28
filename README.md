@@ -188,6 +188,18 @@ http.Handle("/healthz/db", httpprobe.CachedHandler(s, httpprobe.WithName("db")))
 
 The probe runs at most once per interval, regardless of request volume.
 
+Need a fresh result now (e.g. on startup, after a reconnect, or from an admin
+endpoint)? `Check` evaluates the probe immediately, with the same timeout and
+reporter behaviour as a tick, stores the result in the State and returns it:
+
+```go
+st := r.Check(ctx) // safe before Start and concurrently with it
+```
+
+Ticks and `Check` calls are serialized, so results land in the State strictly
+in evaluation order. If `ctx` is canceled, nothing is stored and `Check`
+returns the current cached status (`StatusUnknown` if never set).
+
 ---
 
 ## Reporters
@@ -222,8 +234,10 @@ type Reporter interface {
 }
 ```
 
-Reporters are called synchronously from the runner tick goroutine — a slow
-reporter blocks the next tick. Dispatch to a worker pool if needed.
+Reporters are called synchronously from the evaluating goroutine (the runner
+tick or the `Check` caller) while evaluations are serialized — a slow reporter
+blocks the next tick and any pending `Check`. Dispatch to a worker pool if
+needed.
 
 ---
 
