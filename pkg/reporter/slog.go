@@ -22,6 +22,7 @@ func Slog(logger *slog.Logger) Reporter {
 			slog.String("name", ev.Name),
 			slog.String("prev", ev.Prev.String()),
 			slog.String("cur", ev.Cur.String()),
+			slog.String("reason", ev.Reason),
 		)
 	})
 }

@@ -21,6 +21,9 @@ import (
 )
 
 type (
+	Result     = probe.Result
+	Detailed   = probe.Detailed
+	ResultFunc = probe.ResultFunc
 	Status     = probe.Status
 	Probe      = probe.Probe
 	Func       = probe.Func
@@ -45,3 +48,6 @@ func Liveness(p Probe, opts ...HTTPOption) *HTTPProbe   { return httpprobe.Liven
 func Readiness(p Probe, opts ...HTTPOption) *HTTPProbe  { return httpprobe.Readiness(p, opts...) }
 func Startup(p Probe, opts ...HTTPOption) *HTTPProbe    { return httpprobe.Startup(p, opts...) }
 func Mux(probes ...*HTTPProbe) *http.ServeMux           { return httpprobe.Mux(probes...) }
+
+// Evaluate performs one check, preserving an optional failure reason.
+func Evaluate(ctx context.Context, p Probe) Result { return probe.Evaluate(ctx, p) }

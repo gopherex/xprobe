@@ -55,11 +55,11 @@ func (f Func) Check(ctx context.Context) Status { return f(ctx) }
 
 // FromError wraps an error-returning function: nil error -> StatusUp, otherwise StatusDown.
 func FromError(f func(ctx context.Context) error) Probe {
-	return Func(func(ctx context.Context) Status {
-		if f(ctx) != nil {
-			return StatusDown
+	return ResultFunc(func(ctx context.Context) Result {
+		if err := f(ctx); err != nil {
+			return Result{Status: StatusDown, Reason: err.Error()}
 		}
-		return StatusUp
+		return Result{Status: StatusUp}
 	})
 }
 

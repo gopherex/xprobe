@@ -25,6 +25,10 @@ type Event struct {
 	Prev probe.Status
 	// Cur is the new status.
 	Cur probe.Status
+	// PrevReason and Reason describe the old and new observations. Reporters
+	// also receive reason-only changes while the status remains unhealthy.
+	PrevReason string
+	Reason     string
 }
 
 // Reporter is invoked when a probe's cached status changes.

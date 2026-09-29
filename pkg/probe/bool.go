@@ -5,23 +5,28 @@ import (
 	"sync/atomic"
 )
 
-// Bool is a probe whose Status is toggled by external code via Set.
-// Safe for concurrent use.
-type Bool struct {
-	healthy atomic.Bool
-}
+// Bool is a toggleable probe. Its zero value is down. Status and reason are
+// stored atomically and may be read or updated concurrently.
+type Bool struct{ result atomic.Pointer[Result] }
 
 func NewBool() *Bool { return &Bool{} }
 
-// Set updates the underlying health flag.
-func (b *Bool) Set(v bool) { b.healthy.Store(v) }
+// Set updates health and clears any previous reason.
+func (b *Bool) Set(v bool) { b.SetReason(v, "") }
 
-// Get returns the current flag value.
-func (b *Bool) Get() bool { return b.healthy.Load() }
-
-func (b *Bool) Check(_ context.Context) Status {
-	if b.healthy.Load() {
-		return StatusUp
+// SetReason explains an unhealthy flag. A healthy flag always clears reason.
+func (b *Bool) SetReason(v bool, reason string) {
+	r := Result{Status: StatusDown, Reason: reason}
+	if v {
+		r = Result{Status: StatusUp}
 	}
-	return StatusDown
+	b.result.Store(&r)
+}
+func (b *Bool) Get() bool                        { return b.CheckResult(context.Background()).Status.OK() }
+func (b *Bool) Check(ctx context.Context) Status { return b.CheckResult(ctx).Status }
+func (b *Bool) CheckResult(context.Context) Result {
+	if r := b.result.Load(); r != nil {
+		return *r
+	}
+	return Result{Status: StatusDown}
 }

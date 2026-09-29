@@ -5,7 +5,7 @@ go 1.25.0
 replace github.com/gopherex/xprobe => ../../..
 
 require (
-	github.com/gopherex/xprobe v1.1.0
+	github.com/gopherex/xprobe v1.2.0
 	google.golang.org/grpc v1.81.1
 )
 

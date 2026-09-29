@@ -2,6 +2,7 @@ package probe
 
 import (
 	"context"
+	"strings"
 	"sync"
 )
 
@@ -81,20 +82,30 @@ func (c *Composite) snapshot() []Probe {
 
 // Check runs all child probes concurrently and aggregates by Mode.
 // Empty composites report StatusUp.
-func (c *Composite) Check(ctx context.Context) Status {
+func (c *Composite) Check(ctx context.Context) Status { return c.CheckResult(ctx).Status }
+
+// CheckResult aggregates observations in declaration order, including names
+// and reasons of failing children. A successful Any has no failure reason.
+func (c *Composite) CheckResult(ctx context.Context) Result {
 	probes := c.snapshot()
 	if len(probes) == 0 {
-		return StatusUp
+		return Result{Status: StatusUp}
 	}
-
-	statuses := make([]Status, len(probes))
+	results := make([]Result, len(probes))
 	async := c.factory()
 	for i, p := range probes {
-		async.Go(func() { statuses[i] = p.Check(ctx) })
+		async.Go(func() { results[i] = Evaluate(ctx, p) })
 	}
 	async.Wait()
-
-	return reduce(statuses, c.mode)
+	statuses := make([]Status, len(results))
+	var reasons []string
+	for i, r := range results {
+		statuses[i] = r.Status
+		if !r.Status.OK() && r.Reason != "" {
+			reasons = append(reasons, r.Reason)
+		}
+	}
+	return (Result{Status: reduce(statuses, c.mode), Reason: strings.Join(reasons, "; ")}).Normalized()
 }
 
 func reduce(statuses []Status, mode Mode) Status {

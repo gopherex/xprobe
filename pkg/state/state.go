@@ -20,7 +20,7 @@ import (
 // observe an ordering inconsistent with the status mutations themselves.
 type State struct {
 	mu     sync.RWMutex
-	status probe.Status
+	result probe.Result
 	set    bool
 	subs   map[chan probe.Status]struct{}
 }
@@ -35,7 +35,7 @@ func New() *State {
 func (s *State) Get() probe.Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.status
+	return s.result.Status
 }
 
 // HasBeenSet reports whether Set has ever been called on this State.
@@ -55,19 +55,33 @@ func (s *State) HasBeenSet() bool {
 // concurrent Set calls produce a notification order consistent with the
 // final status.
 func (s *State) Set(st probe.Status) (prev probe.Status, changed bool) {
+	old, changed := s.SetResult(probe.Result{Status: st})
+	return old.Status, changed
+}
+
+// Result returns the status and reason from the same cached observation.
+func (s *State) Result() probe.Result {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.result
+}
+
+// SetResult atomically replaces an observation. A reason-only change is a
+// change too. Status subscribers are notified only when the status changes.
+func (s *State) SetResult(r probe.Result) (prev probe.Result, changed bool) {
+	r = r.Normalized()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	prev = s.status
-	wasSet := s.set
+	prev, wasSet := s.result, s.set
 	s.set = true
-	if wasSet && prev == st {
+	if wasSet && prev == r {
 		return prev, false
 	}
-	s.status = st
-
-	for ch := range s.subs {
-		drainSend(ch, st)
+	s.result = r
+	if !wasSet || prev.Status != r.Status {
+		for ch := range s.subs {
+			drainSend(ch, r.Status)
+		}
 	}
 	return prev, true
 }
@@ -77,7 +91,7 @@ func (s *State) Set(st probe.Status) (prev probe.Status, changed bool) {
 func (s *State) Subscribe(ctx context.Context) <-chan probe.Status {
 	ch := make(chan probe.Status, 1)
 	s.mu.Lock()
-	ch <- s.status
+	ch <- s.result.Status
 	s.subs[ch] = struct{}{}
 	s.mu.Unlock()
 

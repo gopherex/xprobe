@@ -129,22 +129,25 @@ func (r *Runner) evaluate(ctx context.Context) (probe.Status, bool) {
 	checkCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	ch := make(chan probe.Status, 1)
-	go func() { ch <- r.probe.Check(checkCtx) }()
+	ch := make(chan probe.Result, 1)
+	go func() { ch <- probe.Evaluate(checkCtx, r.probe) }()
 
-	var s probe.Status
+	var result probe.Result
 	select {
 	case <-checkCtx.Done():
 		if ctx.Err() != nil {
 			return probe.StatusUnknown, false
 		}
-		s = probe.StatusTimeout
-	case s = <-ch:
+		result = probe.Result{Status: probe.StatusTimeout, Reason: checkCtx.Err().Error()}
+	case result = <-ch:
 	}
 
-	prev, changed := r.state.Set(s)
-	if changed {
-		r.reporter.OnStatus(ctx, reporter.Event{Name: r.name, Prev: prev, Cur: s})
+	if ctx.Err() != nil {
+		return probe.StatusUnknown, false
 	}
-	return s, true
+	prev, changed := r.state.SetResult(result)
+	if changed {
+		r.reporter.OnStatus(ctx, reporter.Event{Name: r.name, Prev: prev.Status, Cur: result.Status, PrevReason: prev.Reason, Reason: result.Reason})
+	}
+	return result.Status, true
 }

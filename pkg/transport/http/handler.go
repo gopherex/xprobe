@@ -49,17 +49,20 @@ func AsJSON() Option { return func(o *handlerOpts) { o.json = true } }
 // On deadline expiry, StatusTimeout is returned; the probe goroutine may
 // outlive the call but will not block the caller.
 func WaitProbe(ctx context.Context, p probe.Probe, timeout time.Duration) probe.Status {
+	return WaitResult(ctx, p, timeout).Status
+}
+
+// WaitResult bounds one check and preserves its reason.
+func WaitResult(ctx context.Context, p probe.Probe, timeout time.Duration) probe.Result {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
-	ch := make(chan probe.Status, 1)
-	go func() { ch <- p.Check(waitCtx) }()
-
+	ch := make(chan probe.Result, 1)
+	go func() { ch <- probe.Evaluate(waitCtx, p) }()
 	select {
 	case <-waitCtx.Done():
-		return probe.StatusTimeout
-	case s := <-ch:
-		return s
+		return probe.Result{Status: probe.StatusTimeout, Reason: waitCtx.Err().Error()}
+	case r := <-ch:
+		return r
 	}
 }
 
@@ -72,33 +75,38 @@ func Handler(p probe.Probe, opts ...Option) http.HandlerFunc {
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		s := WaitProbe(r.Context(), p, o.timeout)
-		code := codeFor(s)
-
-		if o.json {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(code)
-			_ = json.NewEncoder(w).Encode(struct {
-				Name   string `json:"name,omitempty"`
-				Status string `json:"status"`
-			}{Name: o.name, Status: s.String()})
-			return
-		}
-
-		w.WriteHeader(code)
-		if s == probe.StatusUp {
-			_, _ = w.Write([]byte("Healthy"))
-			return
-		}
-		body := "Unhealthy"
-		if o.name != "" {
-			body += " " + o.name
-		}
-		if s == probe.StatusTimeout {
-			body += " (timeout)"
-		}
-		_, _ = w.Write([]byte(body))
+		render(w, WaitResult(r.Context(), p, o.timeout), o)
 	}
+}
+
+func render(w http.ResponseWriter, r probe.Result, o handlerOpts) {
+	st := r.Status
+	if o.json {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(codeFor(st))
+		_ = json.NewEncoder(w).Encode(struct {
+			Name   string `json:"name,omitempty"`
+			Status string `json:"status"`
+			Reason string `json:"reason,omitempty"`
+		}{Name: o.name, Status: st.String(), Reason: r.Reason})
+		return
+	}
+	w.WriteHeader(codeFor(st))
+	if st == probe.StatusUp {
+		_, _ = w.Write([]byte("Healthy"))
+		return
+	}
+	body := "Unhealthy"
+	if o.name != "" {
+		body += " " + o.name
+	}
+	if st == probe.StatusTimeout {
+		body += " (timeout)"
+	}
+	if r.Reason != "" {
+		body += ": " + r.Reason
+	}
+	_, _ = w.Write([]byte(body))
 }
 
 func codeFor(s probe.Status) int {

@@ -360,3 +360,23 @@ Pick pull-mode HTTP when your check is cheap. Switch to cached HTTP / gRPC when 
 ## License
 
 See [LICENSE](LICENSE).
+
+## Failure reasons
+
+Existing `Probe.Check(ctx) Status` implementations continue to work.
+`probe.ResultFunc` and the optional `probe.Detailed` interface return a
+`probe.Result{Status, Reason}` from a single observation. Use `probe.Evaluate`
+to consume either interface without running a check twice.
+
+`FromError` preserves the error message. `WithName` prefixes failing reasons;
+`All` aggregates them in declaration order and a successful `Any` clears them.
+`Bool.SetReason(false, "database unavailable")` atomically sets a reason;
+`Set(true)` clears it. Avoid placing secrets in reasons: they are diagnostic
+output, available in HTTP responses and logs.
+
+The runner caches the complete result with `State.SetResult`; `State.Result`
+reads status and reason together. Reporters receive reason-only changes as
+well as status transitions (`Event.Reason` and `PrevReason`). Status-only
+subscribers and the standard gRPC health protocol keep their existing contract.
+HTTP pull and cached handlers return the same reason, as optional `reason` in
+JSON (`AsJSON`) or after the unhealthy text. Healthy responses omit the reason.

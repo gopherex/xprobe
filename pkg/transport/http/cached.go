@@ -1,10 +1,8 @@
 package httpprobe
 
 import (
-	"encoding/json"
 	"net/http"
 
-	"github.com/gopherex/xprobe/pkg/probe"
 	"github.com/gopherex/xprobe/pkg/state"
 )
 
@@ -21,31 +19,6 @@ func CachedHandler(s *state.State, opts ...Option) http.HandlerFunc {
 	}
 
 	return func(w http.ResponseWriter, _ *http.Request) {
-		st := s.Get()
-		code := codeFor(st)
-
-		if o.json {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(code)
-			_ = json.NewEncoder(w).Encode(struct {
-				Name   string `json:"name,omitempty"`
-				Status string `json:"status"`
-			}{Name: o.name, Status: st.String()})
-			return
-		}
-
-		w.WriteHeader(code)
-		if st == probe.StatusUp {
-			_, _ = w.Write([]byte("Healthy"))
-			return
-		}
-		body := "Unhealthy"
-		if o.name != "" {
-			body += " " + o.name
-		}
-		if st == probe.StatusTimeout {
-			body += " (timeout)"
-		}
-		_, _ = w.Write([]byte(body))
+		render(w, s.Result(), o)
 	}
 }
